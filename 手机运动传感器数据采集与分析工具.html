@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>手机运动传感器数据采集与分析工具</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.0/dist/chart.min.js"></script>
+  <style>
+    .chart-container {
+      position: relative;
+      height: 180px;
+      width: 100%;
+      margin-bottom: 1rem;
+    }
+    .current-values {
+      font-size: 0.8rem;
+    }
+    .tab-active {
+      background-color: #4F46E5;
+      color: white;
+    }
+  </style>
+</head>
+<body class="bg-gray-100">
+  <div class="container mx-auto px-4 py-6 max-w-lg">
+    <h1 class="text-2xl font-bold text-center mb-4">手机运动传感器数据采集工具</h1>
+    
+    <!-- 权限提示 -->
+    <div id="permissionAlert" class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-4">
+      <p>本应用需要访问您设备的运动传感器。请确保您的设备支持相关传感器，并允许访问权限。</p>
+    </div>
+    
+    <!-- 控制面板 -->
+    <div class="bg-white rounded-lg shadow-md p-4 mb-4">
+      <div class="flex flex-wrap items-center justify-between mb-4">
+        <div class="w-full md:w-auto mb-2 md:mb-0">
+          <label class="block text-gray-700 text-sm font-bold mb-2" for="frequency">
+            采样频率
+          </label>
+          <select id="frequency" class="shadow border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
+            <option value="10">10Hz</option>
+            <option value="20">20Hz</option>
+            <option value="50">50Hz</option>
+            <option value="100" selected>100Hz</option>
+            <option value="200">200Hz</option>
+          </select>
+        </div>
+        
+        <div class="flex space-x-2">
+          <button id="startBtn" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
+            开始采集
+          </button>
+          <button id="stopBtn" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" disabled>
+            停止采集
+          </button>
+          <button id="exportBtn" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" disabled>
+            导出数据
+          </button>
+        </div>
+      </div>
+      
+      <div class="text-sm text-gray-600">
+        <p id="recordingStatus" class="hidden">
+          <span class="inline-block h-3 w-3 bg-red-600 rounded-full animate-pulse mr-1"></span>
+          正在记录数据 - 已采集 <span id="dataPointCount">0</span> 个数据点
+        </p>
+      </div>
+    </div>
+    
+    <!-- 数据可视化标签页 -->
+    <div class="bg-white rounded-lg shadow-md p-4">
+      <div class="flex border-b mb-4">
+        <button id="tabAccel" class="tab-active flex-1 py-2 px-4 focus:outline-none">加速度</button>
+        <button id="tabGyro" class="flex-1 py-2 px-4 focus:outline-none">陀螺仪</button>
+      </div>
+      
+      <!-- 加速度图表 -->
+      <div id="accelCharts" class="mb-4">
+        <div class="chart-container">
+          <canvas id="accelXChart"></canvas>
+        </div>
+        <div class="chart-container">
+          <canvas id="accelYChart"></canvas>
+        </div>
+        <div class="chart-container">
+          <canvas id="accelZChart"></canvas>
+        </div>
+        <div class="grid grid-cols-3 gap-2 current-values">
+          <div class="bg-gray-100 p-2 rounded">
+            X轴: <span id="accelXValue">0.00</span> m/s²
+          </div>
+          <div class="bg-gray-100 p-2 rounded">
+            Y轴: <span id="accelYValue">0.00</span> m/s²
+          </div>
+          <div class="bg-gray-100 p-2 rounded">
+            Z轴: <span id="accelZValue">0.00</span> m/s²
+          </div>
+        </div>
+      </div>
+      
+      <!-- 陀螺仪图表 -->
+      <div id="gyroCharts" class="mb-4 hidden">
+        <div class="chart-container">
+          <canvas id="gyroAlphaChart"></canvas>
+        </div>
+        <div class="chart-container">
+          <canvas id="gyroBetaChart"></canvas>
+        </div>
+        <div class="chart-container">
+          <canvas id="gyroGammaChart"></canvas>
+        </div>
+        <div class="grid grid-cols-3 gap-2 current-values">
+          <div class="bg-gray-100 p-2 rounded">
+            Alpha: <span id="gyroAlphaValue">0.00</span> deg/s
+          </div>
+          <div class="bg-gray-100 p-2 rounded">
+            Beta: <span id="gyroBetaValue">0.00</span> deg/s
+          </div>
+          <div class="bg-gray-100 p-2 rounded">
+            Gamma: <span id="gyroGammaValue">0.00</span> deg/s
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    // 应用状态
+    const appState = {
+      isRecording: false,
+      frequency: 100,
+      accelData: {
+        x: [],
+        y: [],
+        z: [],
+        timestamp: []
+      },
+      gyroData: {
+        alpha: [],
+        beta: [],
+        gamma: [],
+        timestamp: []
+      },
+      charts: {},
+      maxDataPoints: 100 // 图表上显示的最大数据点数
+    };
+    
+    // DOM元素
+    const elements = {
+      startBtn: document.getElementById('startBtn'),
+      stopBtn: document.getElementById('stopBtn'),
+      exportBtn: document.getElementById('exportBtn'),
+      frequencySelect: document.getElementById('frequency'),
+      recordingStatus: document.getElementById('recordingStatus'),
+      dataPointCount: document.getElementById('dataPointCount'),
+      tabAccel: document.getElementById('tabAccel'),
+      tabGyro: document.getElementById('tabGyro'),
+      accelCharts: document.getElementById('accelCharts'),
+      gyroCharts: document.getElementById('gyroCharts'),
+      permissionAlert: document.getElementById('permissionAlert'),
+      accelXValue: document.getElementById('accelXValue'),
+      accelYValue: document.getElementById('accelYValue'),
+      accelZValue: document.getElementById('accelZValue'),
+      gyroAlphaValue: document.getElementById('gyroAlphaValue'),
+      gyroBetaValue: document.getElementById('gyroBetaValue'),
+      gyroGammaValue: document.getElementById('gyroGammaValue')
+    };
+    
+    // 初始化图表
+    function initCharts() {
+      const commonOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        scales: {
+          x: {
+            type: 'linear',
+            display: false
+          },
+          y: {
+            beginAtZero: false
+          }
+        },
+        plugins: {
+          legend: {
+            display: false
+          }
+        }
+      };
+      
+      // 加速度图表
+      appState.charts.accelX = new Chart(
+        document.getElementById('accelXChart'),
+        {
+          type: 'line',
+          data: {
+            datasets: [{
+              label: '加速度 X',
+              data: [],
+              borderColor: 'rgb(255, 99, 132)',
+              borderWidth: 1,
+              pointRadius: 0
+            }]
+          },
+          options: {
+            ...commonOptions,
+            plugins: {
+              ...commonOptions.plugins,
+              title: {
+                display: true,
+                text: '加速度 X轴 (m/s²)'
+              }
+            }
+          }
+        }
+      );
+      
+      appState.charts.accelY = new Chart(
+        document.getElementById('accelYChart'),
+        {
+          type: 'line',
+          data: {
+            datasets: [{
+              label: '加速度 Y',
+              data: [],
+              borderColor: 'rgb(54, 162, 235)',
+              borderWidth: 1,
+              pointRadius: 0
+            }]
+          },
+          options: {
+            ...commonOptions,
+            plugins: {
+              ...commonOptions.plugins,
+              title: {
+                display: true,
+                text: '加速度 Y轴 (m/s²)'
+              }
+            }
+          }
+        }
+      );
+      
+      appState.charts.accelZ = new Chart(
+        document.getElementById('accelZChart'),
+        {
+          type: 'line',
+          data: {
+            datasets: [{
+              label: '加速度 Z',
+              data: [],
+              borderColor: 'rgb(75, 192, 192)',
+              borderWidth: 1,
+              pointRadius: 0
+            }]
+          },
+          options: {
+            ...commonOptions,
+            plugins: {
+              ...commonOptions.plugins,
+              title: {
+                display: true,
+                text: '加速度 Z轴 (m/s²)'
+              }
+            }
+          }
+        }
+      );
+      
+      // 陀螺仪图表
+      appState.charts.gyroAlpha = new Chart(
+        document.getElementById('gyroAlphaChart'),
+        {
+          type: 'line',
+          data: {
+            datasets: [{
+              label: '陀螺仪 Alpha',
+              data: [],
+              borderColor: 'rgb(153, 102, 255)',
+              borderWidth: 1,
+              pointRadius: 0
+            }]
+          },
+          options: {
+            ...commonOptions,
+            plugins: {
+              ...commonOptions.plugins,
+              title: {
+                display: true,
+                text: '陀螺仪 Alpha (deg/s)'
+              }
+            }
+          }
+        }
+      );
+      
+      appState.charts.gyroBeta = new Chart(
+        document.getElementById('gyroBetaChart'),
+        {
+          type: 'line',
+          data: {
+            datasets: [{
+              label: '陀螺仪 Beta',
+              data: [],
+              borderColor: 'rgb(255, 159, 64)',
+              borderWidth: 1,
+              pointRadius: 0
+            }]
+          },
+          options: {
+            ...commonOptions,
+            plugins: {
+              ...commonOptions.plugins,
+              title: {
+                display: true,
+                text: '陀螺仪 Beta (deg/s)'
+              }
+            }
+          }
+        }
+      );
+      
+      appState.charts.gyroGamma = new Chart(
+        document.getElementById('gyroGammaChart'),
+        {
+          type: 'line',
+          data: {
+            datasets: [{
+              label: '陀螺仪 Gamma',
+              data: [],
+              borderColor: 'rgb(255, 205, 86)',
+              borderWidth: 1,
+              pointRadius: 0
+            }]
+          },
+          options: {
+            ...commonOptions,
+            plugins: {
+              ...commonOptions.plugins,
+              title: {
+                display: true,
+                text: '陀螺仪 Gamma (deg/s)'
+              }
+            }
+          }
+        }
+      );
+    }
+    
+    // 更新图表数据
+    function updateCharts(accel, gyro, timestamp) {
+      const timeIndex = appState.accelData.timestamp.length;
+      
+      // 更新加速度图表
+      appState.charts.accelX.data.datasets[0].data.push({x: timeIndex, y: accel.x});
+      appState.charts.accelY.data.datasets[0].data.push({x: timeIndex, y: accel.y});
+      appState.charts.accelZ.data.datasets[0].data.push({x: timeIndex, y: accel.z});
+      
+      // 更新陀螺仪图表
+      appState.charts.gyroAlpha.data.datasets[0].data.push({x: timeIndex, y: gyro.alpha});
+      appState.charts.gyroBeta.data.datasets[0].data.push({x: timeIndex, y: gyro.beta});
+      appState.charts.gyroGamma.data.datasets[0].data.push({x: timeIndex, y: gyro.gamma});
+      
+      // 限制图表显示的数据点数量
+      if (timeIndex > appState.maxDataPoints) {
+        appState.charts.accelX.data.datasets[0].data.shift();
+        appState.charts.accelY.data.datasets[0].data.shift();
+        appState.charts.accelZ.data.datasets[0].data.shift();
+        appState.charts.gyroAlpha.data.datasets[0].data.shift();
+        appState.charts.gyroBeta.data.datasets[0].data.shift();
+        appState.charts.gyroGamma.data.datasets[0].data.shift();
+      }
+      
+      // 更新图表
+      appState.charts.accelX.update();
+      appState.charts.accelY.update();
+      appState.charts.accelZ.update();
+      appState.charts.gyroAlpha.update();
+      appState.charts.gyroBeta.update();
+      appState.charts.gyroGamma.update();
+      
+      // 更新当前值显示
+      elements.accelXValue.textContent = accel.x.toFixed(2);
+      elements.accelYValue.textContent = accel.y.toFixed(2);
+      elements.accelZValue.textContent = accel.z.toFixed(2);
+      elements.gyroAlphaValue.textContent = gyro.alpha.toFixed(2);
+      elements.gyroBetaValue.textContent = gyro.beta.toFixed(2);
+      elements.gyroGammaValue.textContent = gyro.gamma.toFixed(2);
+    }
+    
+    // 处理设备运动数据
+    function handleDeviceMotion(event) {
+      if (!appState.isRecording) return;
+      
+      const timestamp = new Date().getTime();
+      
+      // 获取加速度数据（包括重力）
+      const accel = {
+        x: event.accelerationIncludingGravity.x || 0,
+        y: event.accelerationIncludingGravity.y || 0,
+        z: event.accelerationIncludingGravity.z || 0
+      };
+      
+      // 获取陀螺仪数据
+      const gyro = {
+        alpha: event.rotationRate.alpha || 0,
+        beta: event.rotationRate.beta || 0,
+        gamma: event.rotationRate.gamma || 0
+      };
+      
+      // 存储数据
+      appState.accelData.x.push(accel.x);
+      appState.accelData.y.push(accel.y);
+      appState.accelData.z.push(accel.z);
+      appState.accelData.timestamp.push(timestamp);
+      
+      appState.gyroData.alpha.push(gyro.alpha);
+      appState.gyroData.beta.push(gyro.beta);
+      appState.gyroData.gamma.push(gyro.gamma);
+      appState.gyroData.timestamp.push(timestamp);
+      
+      // 更新数据点计数
+      elements.dataPointCount.textContent = appState.accelData.timestamp.length;
+      
+      // 更新图表
+      updateCharts(accel, gyro, timestamp);
+    }
+    
+    // 开始数据采集
+    function startRecording() {
+      // 清空之前的数据
+      appState.accelData = { x: [], y: [], z: [], timestamp: [] };
+      appState.gyroData = { alpha: [], beta: [], gamma: [], timestamp: [] };
+      
+      // 清空图表数据
+      appState.charts.accelX.data.datasets[0].data = [];
+      appState.charts.accelY.data.datasets[0].data = [];
+      appState.charts.accelZ.data.datasets[0].data = [];
+      appState.charts.gyroAlpha.data.datasets[0].data = [];
+      appState.charts.gyroBeta.data.datasets[0].data = [];
+      appState.charts.gyroGamma.data.datasets[0].data = [];
+      
+      // 更新所有图表
+      Object.values(appState.charts).forEach(chart => chart.update());
+      
+      // 获取用户选择的频率
+      appState.frequency = parseInt(elements.frequencySelect.value);
+      
+      // 设置事件监听器
+      if (window.DeviceMotionEvent) {
+        // 请求权限（iOS 13+需要）
+        if (typeof DeviceMotionEvent.requestPermission === 'function') {
+          DeviceMotionEvent.requestPermission()
+            .then(permissionState => {
+              if (permissionState === 'granted') {
+                window.addEventListener('devicemotion', handleDeviceMotion);
+                appState.isRecording = true;
+                updateUIForRecording(true);
+              } else {
+                alert('需要传感器权限才能采集数据');
+              }
+            })
+            .catch(console.error);
+        } else {
+          // 其他设备直接添加监听器
+          window.addEventListener('devicemotion', handleDeviceMotion);
+          appState.isRecording = true;
+          updateUIForRecording(true);
+        }
+      } else {
+        alert('您的设备不支持运动传感器');
+      }
+    }
+    
+    // 停止数据采集
+    function stopRecording() {
+      if (window.DeviceMotionEvent) {
+        window.removeEventListener('devicemotion', handleDeviceMotion);
+      }
+      appState.isRecording = false;
+      updateUIForRecording(false);
+    }
+    
+    // 更新UI状态
+    function updateUIForRecording(isRecording) {
+      if (isRecording) {
+        elements.startBtn.disabled = true;
+        elements.stopBtn.disabled = false;
+        elements.exportBtn.disabled = true;
+        elements.frequencySelect.disabled = true;
+        elements.recordingStatus.classList.remove('hidden');
+      } else {
+        elements.startBtn.disabled = false;
+        elements.stopBtn.disabled = true;
+        elements.exportBtn.disabled = appState.accelData.timestamp.length === 0;
+        elements.frequencySelect.disabled = false;
+        elements.recordingStatus.classList.add('hidden');
+      }
+    }
+    
+    // 导出数据为CSV
+    function exportData() {
+      if (appState.accelData.timestamp.length === 0) {
+        alert('没有数据可导出');
+        return;
+      }
+      
+      // 创建加速度数据CSV
+      let accelCsv = 'timestamp,x,y,z\n';
+      for (let i = 0; i < appState.accelData.timestamp.length; i++) {
+        accelCsv += `${appState.accelData.timestamp[i]},${appState.accelData.x[i]},${appState.accelData.y[i]},${appState.accelData.z[i]}\n`;
+      }
+      
+      // 创建陀螺仪数据CSV
+      let gyroCsv = 'timestamp,alpha,beta,gamma\n';
+      for (let i = 0; i < appState.gyroData.timestamp.length; i++) {
+        gyroCsv += `${appState.gyroData.timestamp[i]},${appState.gyroData.alpha[i]},${appState.gyroData.beta[i]},${appState.gyroData.gamma[i]}\n`;
+      }
+      
+      // 下载加速度数据
+      downloadCsv(accelCsv, 'acceleration_data.csv');
+      
+      // 下载陀螺仪数据
+      setTimeout(() => {
+        downloadCsv(gyroCsv, 'gyroscope_data.csv');
+      }, 100);
+    }
+    
+    // 下载CSV文件
+    function downloadCsv(csvContent, fileName) {
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      
+      // 创建下载链接
+      if (navigator.msSaveBlob) { // IE 10+
+        navigator.msSaveBlob(blob, fileName);
+      } else {
+        const url = URL.createObjectURL(blob);
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+    }
+    
+    // 初始化应用
+    function initApp() {
+      // 初始化图表
+      initCharts();
+      
+      // 绑定事件处理程序
+      elements.startBtn.addEventListener('click', startRecording);
+      elements.stopBtn.addEventListener('click', stopRecording);
+      elements.exportBtn.addEventListener('click', exportData);
+      
+      // 标签页切换
+      elements.tabAccel.addEventListener('click', () => {
+        elements.tabAccel.classList.add('tab-active');
+        elements.tabGyro.classList.remove('tab-active');
+        elements.accelCharts.classList.remove('hidden');
+        elements.gyroCharts.classList.add('hidden');
+      });
+      
+      elements.tabGyro.addEventListener('click', () => {
+        elements.tabAccel.classList.remove('tab-active');
+        elements.tabGyro.classList.add('tab-active');
+        elements.accelCharts.classList.add('hidden');
+        elements.gyroCharts.classList.remove('hidden');
+      });
+      
+      // 检查设备支持
+      if (!window.DeviceMotionEvent) {
+        elements.permissionAlert.innerHTML = '<p class="text-red-600">您的设备不支持运动传感器API</p>';
+        elements.startBtn.disabled = true;
+      }
+    }
+    
+    // 当页面加载完成后初始化应用
+    document.addEventListener('DOMContentLoaded', initApp);
+  </script>
+</body>
+</html>
