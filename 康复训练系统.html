@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>康复训练系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            background: #0a0e27;
+            min-height: 100vh;
+            color: #fff;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+
+        /* 主游戏区域 */
+        .game-area {
+            flex: 1;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .game-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 30px;
+            background: rgba(255,255,255,0.05);
+        }
+
+        .game-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 20px;
+        }
+
+        .game-title .icon {
+            font-size: 28px;
+        }
+
+        .header-buttons {
+            display: flex;
+            gap: 15px;
+        }
+
+        .btn {
+            padding: 10px 25px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .btn-reset {
+            background: rgba(255,255,255,0.1);
+            color: #fff;
+        }
+
+        .btn-start {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: #fff;
+        }
+
+        .btn:hover {
+            transform: scale(1.05);
+        }
+
+        /* 游戏画布 - 网格背景 */
+        .game-canvas {
+            flex: 1;
+            position: relative;
+            background: 
+                linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            overflow: hidden;
+        }
+
+        /* 网格加强线 */
+        .game-canvas::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                linear-gradient(rgba(255,255,255,0.08) 2px, transparent 2px),
+                linear-gradient(90deg, rgba(255,255,255,0.08) 2px, transparent 2px);
+            background-size: 250px 250px;
+            pointer-events: none;
+        }
+
+        /* 点击目标 */
+        .click-target {
+            position: absolute;
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 36px;
+            transition: transform 0.1s;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        .click-target.emoji {
+            background: radial-gradient(circle, #c9553d 0%, #8b3a2f 100%);
+            box-shadow: 0 0 30px rgba(201, 85, 61, 0.5);
+        }
+
+        .click-target.circle {
+            background: transparent;
+            border: 4px solid #3b82f6;
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+        }
+
+        .click-target:hover {
+            transform: scale(1.1);
+        }
+
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.3); }
+            50% { box-shadow: 0 0 40px rgba(59, 130, 246, 0.6); }
+        }
+
+        /* 拖拽游戏元素 */
+        .drag-item {
+            position: absolute;
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            cursor: grab;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            background: linear-gradient(135deg, #6366f1, #4f46e5);
+            box-shadow: 0 5px 20px rgba(99, 102, 241, 0.4);
+            transition: box-shadow 0.3s;
+            user-select: none;
+        }
+
+        .drag-item:active {
+            cursor: grabbing;
+            box-shadow: 0 10px 40px rgba(99, 102, 241, 0.6);
+        }
+
+        .drag-target {
+            position: absolute;
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            border: 3px dashed #22c55e;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            background: rgba(34, 197, 94, 0.1);
+        }
+
+        .drag-target.active {
+            background: rgba(34, 197, 94, 0.3);
+            border-style: solid;
+        }
+
+        /* 引导路径 */
+        .guide-path {
+            position: absolute;
+            pointer-events: none;
+        }
+
+        .guide-path svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .guide-path path {
+            fill: none;
+            stroke: rgba(34, 197, 94, 0.3);
+            stroke-width: 40;
+            stroke-linecap: round;
+        }
+
+        .guide-path .path-center {
+            stroke: rgba(34, 197, 94, 0.2);
+            stroke-width: 4;
+            stroke-dasharray: 10, 10;
+        }
+
+        /* 底部状态栏 */
+        .game-stats {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 30px;
+            background: rgba(255,255,255,0.05);
+        }
+
+        .stats-left {
+            display: flex;
+            gap: 40px;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #fff;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: rgba(255,255,255,0.5);
+            margin-top: 5px;
+        }
+
+        .game-hint {
+            font-size: 16px;
+            color: rgba(255,255,255,0.7);
+        }
+
+        .game-message {
+            position: absolute;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            padding: 15px 40px;
+            border-radius: 30px;
+            font-size: 16px;
+        }
+
+        /* 右侧面板 */
+        .side-panel {
+            width: 320px;
+            background: rgba(255,255,255,0.05);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            overflow-y: auto;
+        }
+
+        .panel-section {
+            background: rgba(255,255,255,0.05);
+            border-radius: 15px;
+            padding: 20px;
+        }
+
+        .section-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 16px;
+            margin-bottom: 15px;
+        }
+
+        /* 手势追踪显示 */
+        .hand-tracker {
+            height: 180px;
+            background: #0d1230;
+            border-radius: 10px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hand-point {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #3b82f6;
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.8);
+            transition: all 0.1s;
+        }
+
+        .hand-point.small {
+            width: 10px;
+            height: 10px;
+        }
+
+        /* 深度指示器 */
+        .depth-indicator {
+            display: flex;
+            margin-top: 15px;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .depth-zone {
+            flex: 1;
+            padding: 10px;
+            text-align: center;
+            font-size: 12px;
+            position: relative;
+        }
+
+        .depth-zone.hover { background: #1e3a5f; }
+        .depth-zone.near { background: #1e4d4d; }
+        .depth-zone.touch { background: #1e5f2e; }
+
+        .depth-zone.active::after {
+            content: '';
+            position: absolute;
+            top: 5px;
+            right: 10px;
+            width: 12px;
+            height: 12px;
+            background: #fff;
+            border-radius: 50%;
+        }
+
+        .depth-value {
+            text-align: center;
+            margin-top: 15px;
+            font-size: 14px;
+            color: rgba(255,255,255,0.7);
+        }
+
+        /* 游戏选择列表 */
+        .game-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .game-option {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 15px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 2px solid transparent;
+        }
+
+        .game-option:hover {
+            background: rgba(255,255,255,0.1);
+        }
+
+        .game-option.active {
+            background: rgba(59, 130, 246, 0.2);
+            border-color: #3b82f6;
+        }
+
+        .game-option .icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        .game-option .icon.click { background: linear-gradient(135deg, #ef4444, #dc2626); }
+        .game-option .icon.drag { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
+        .game-option .icon.memory { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+        .game-option .icon.draw { background: linear-gradient(135deg, #f59e0b, #d97706); }
+
+        .game-info h4 {
+            font-size: 14px;
+            margin-bottom: 3px;
+        }
+
+        .game-info span {
+            font-size: 12px;
+            color: rgba(255,255,255,0.5);
+        }
+
+        /* 成功动画 */
+        .success-effect {
+            position: absolute;
+            pointer-events: none;
+            animation: successPop 0.5s ease-out forwards;
+        }
+
+        @keyframes successPop {
+            0% { transform: scale(0); opacity: 1; }
+            100% { transform: scale(2); opacity: 0; }
+        }
+
+        .score-popup {
+            position: absolute;
+            font-size: 24px;
+            font-weight: bold;
+            color: #22c55e;
+            pointer-events: none;
+            animation: scoreFloat 1s ease-out forwards;
+        }
+
+        @keyframes scoreFloat {
+            0% { transform: translateY(0); opacity: 1; }
+            100% { transform: translateY(-50px); opacity: 0; }
+        }
+
+        /* 倒计时 */
+        .countdown {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 120px;
+            font-weight: bold;
+            color: #fff;
+            text-shadow: 0 0 50px rgba(255,255,255,0.5);
+            animation: countPulse 1s ease-in-out;
+        }
+
+        @keyframes countPulse {
+            0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+            50% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        }
+
+        /* 进度环 */
+        .progress-ring {
+            position: absolute;
+            pointer-events: none;
+        }
+
+        .trail {
+            position: absolute;
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            background: rgba(59, 130, 246, 0.5);
+            pointer-events: none;
+            animation: trailFade 0.5s ease-out forwards;
+        }
+
+        @keyframes trailFade {
+            0% { opacity: 1; transform: scale(1); }
+            100% { opacity: 0; transform: scale(0.3); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 主游戏区域 -->
+        <div class="game-area">
+            <div class="game-header">
+                <div class="game-title">
+                    <span class="icon" id="currentGameIcon">🎯</span>
+                    <span id="currentGameTitle">精准点击训练</span>
+                </div>
+                <div class="header-buttons">
+                    <button class="btn btn-reset" onclick="resetGame()">重置</button>
+                    <button class="btn btn-start" onclick="startGame()">开始游戏</button>
+                </div>
+            </div>
+
+            <div class="game-canvas" id="gameCanvas">
+                <!-- 游戏元素将动态生成 -->
+                <div class="game-message" id="gameMessage">选择游戏并点击开始</div>
+            </div>
+
+            <div class="game-stats">
+                <div class="stats-left">
+                    <div class="stat-item">
+                        <div class="stat-value" id="scoreValue">0</div>
+                        <div class="stat-label">得分</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="comboValue">0</div>
+                        <div class="stat-label">连击</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="timeValue">120</div>
+                        <div class="stat-label">剩余时间</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="accuracyValue">100%</div>
+                        <div class="stat-label">准确率</div>
+                    </div>
+                </div>
+                <div class="game-hint" id="gameHint">选择右侧游戏开始训练</div>
+            </div>
+        </div>
+
+        <!-- 右侧面板 -->
+        <div class="side-panel">
+            <!-- 手势追踪 -->
+            <div class="panel-section">
+                <div class="section-title">
+                    <span>👋</span>
+                    <span>手势追踪</span>
+                </div>
+                <div class="hand-tracker" id="handTracker">
+                    <div class="hand-point" id="handPoint1" style="top: 60px; left: 180px;"></div>
+                    <div class="hand-point small" id="handPoint2" style="top: 80px; left: 200px;"></div>
+                    <div class="hand-point small" id="handPoint3" style="top: 100px; left: 210px;"></div>
+                </div>
+                <div class="depth-indicator">
+                    <div class="depth-zone hover">
+                        <div>悬停</div>
+                        <div>5-10cm</div>
+                    </div>
+                    <div class="depth-zone near active">
+                        <div>接近</div>
+                        <div>2-5cm</div>
+                    </div>
+                    <div class="depth-zone touch">
+                        <div>触碰</div>
+                        <div>0-2cm</div>
+                    </div>
+                </div>
+                <div class="depth-value">当前深度: <span id="depthValue">3.9</span> cm</div>
+            </div>
+
+            <!-- 游戏选择 -->
+            <div class="panel-section">
+                <div class="section-title">
+                    <span>🎮</span>
+                    <span>游戏选择</span>
+                </div>
+                <div class="game-list">
+                    <div class="game-option active" onclick="selectGame('click')">
+                        <div class="icon click">🎯</div>
+                        <div class="game-info">
+                            <h4>精准点击训练</h4>
+                            <span>手眼协调 · 反应速度</span>
+                        </div>
+                    </div>
+                    <div class="game-option" onclick="selectGame('drag')">
+                        <div class="icon drag">🎨</div>
+                        <div class="game-info">
+                            <h4>引导拖拽训练</h4>
+                            <span>精细控制 · 轨迹跟踪</span>
+                        </div>
+                    </div>
+                    <div class="game-option" onclick="selectGame('memory')">
+                        <div class="icon memory">🧩</div>
+                        <div class="game-info">
+                            <h4>记忆翻牌</h4>
+                            <span>思维领域</span>
+                        </div>
+                    </div>
+                    <div class="game-option" onclick="selectGame('draw')">
+                        <div class="icon draw">✏️</div>
+                        <div class="game-info">
+                            <h4>轨迹描画</h4>
+                            <span>健康领域</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 训练统计 -->
+            <div class="panel-section">
+                <div class="section-title">
+                    <span>📊</span>
+                    <span>训练统计</span>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="color: rgba(255,255,255,0.6);">今日训练次数</span>
+                        <span id="todayCount">3</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="color: rgba(255,255,255,0.6);">平均准确率</span>
+                        <span id="avgAccuracy">87%</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="color: rgba(255,255,255,0.6);">最高连击</span>
+                        <span id="maxCombo">15</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 游戏状态
+        let gameState = {
+            currentGame: 'click',
+            isPlaying: false,
+            score: 0,
+            combo: 0,
+            maxCombo: 0,
+            timeLeft: 120,
+            totalClicks: 0,
+            successClicks: 0,
+            timer: null
+        };
+
+        // DOM 元素
+        const gameCanvas = document.getElementById('gameCanvas');
+        const gameMessage = document.getElementById('gameMessage');
+
+        // 选择游戏
+        function selectGame(game) {
+            gameState.currentGame = game;
+            
+            // 更新UI
+            document.querySelectorAll('.game-option').forEach(el => el.classList.remove('active'));
+            event.currentTarget.classList.add('active');
+
+            const titles = {
+                'click': { icon: '🎯', title: '精准点击训练', hint: '点击出现的目标获得分数' },
+                'drag': { icon: '🎨', title: '引导拖拽训练', hint: '沿着路径拖动物体到目标位置' },
+                'memory': { icon: '🧩', title: '记忆翻牌', hint: '找出相同的配对卡片' },
+                'draw': { icon: '✏️', title: '轨迹描画', hint: '跟随轨迹进行描画' }
+            };
+
+            document.getElementById('currentGameIcon').textContent = titles[game].icon;
+            document.getElementById('currentGameTitle').textContent = titles[game].title;
+            document.getElementById('gameHint').textContent = titles[game].hint;
+            
+            resetGame();
+        }
+
+        // 开始游戏
+        function startGame() {
+            resetGame();
+            gameState.isPlaying = true;
+            
+            // 倒计时开始
+            showCountdown(3, () => {
+                if (gameState.currentGame === 'click') {
+                    startClickGame();
+                } else if (gameState.currentGame === 'drag') {
+                    startDragGame();
+                }
+                startTimer();
+            });
+        }
+
+        // 显示倒计时
+        function showCountdown(count, callback) {
+            gameCanvas.innerHTML = '';
+            
+            if (count > 0) {
+                const countEl = document.createElement('div');
+                countEl.className = 'countdown';
+                countEl.textContent = count;
+                gameCanvas.appendChild(countEl);
+                
+                setTimeout(() => showCountdown(count - 1, callback), 1000);
+            } else {
+                callback();
+            }
+        }
+
+        // 开始计时器
+        function startTimer() {
+            gameState.timer = setInterval(() => {
+                gameState.timeLeft--;
+                document.getElementById('timeValue').textContent = gameState.timeLeft;
+                
+                if (gameState.timeLeft <= 0) {
+                    endGame();
+                }
+            }, 1000);
+        }
+
+        // 重置游戏
+        function resetGame() {
+            gameState.isPlaying = false;
+            gameState.score = 0;
+            gameState.combo = 0;
+            gameState.timeLeft = 120;
+            gameState.totalClicks = 0;
+            gameState.successClicks = 0;
+            
+            if (gameState.timer) {
+                clearInterval(gameState.timer);
+                gameState.timer = null;
+            }
+            
+            updateStats();
+            gameCanvas.innerHTML = '<div class="game-message">选择游戏并点击开始</div>';
+        }
+
+        // 更新统计
+        function updateStats() {
+            document.getElementById('scoreValue').textContent = gameState.score;
+            document.getElementById('comboValue').textContent = gameState.combo;
+            document.getElementById('timeValue').textContent = gameState.timeLeft;
+            
+            const accuracy = gameState.totalClicks > 0 
+                ? Math.round((gameState.successClicks / gameState.totalClicks) * 100) 
+                : 100;
+            document.getElementById('accuracyValue').textContent = accuracy + '%';
+        }
+
+        // ============ 点击游戏 ============
+        function startClickGame() {
+            gameCanvas.innerHTML = '';
+            spawnClickTarget();
+            
+            // 添加点击失败检测
+            gameCanvas.onclick = (e) => {
+                if (e.target === gameCanvas) {
+                    gameState.totalClicks++;
+                    gameState.combo = 0;
+                    updateStats();
+                }
+            };
+        }
+
+        function spawnClickTarget() {
+            if (!gameState.isPlaying) return;
+            
+            const target = document.createElement('div');
+            target.className = 'click-target';
+            
+            // 随机类型
+            const types = ['emoji', 'circle'];
+            const type = types[Math.floor(Math.random() * types.length)];
+            target.classList.add(type);
+            
+            if (type === 'emoji') {
+                const emojis = ['🎨', '⭐', '💎', '🎯', '🔥', '💫'];
+                target.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+            }
+            
+            // 随机位置
+            const padding = 100;
+            const x = padding + Math.random() * (gameCanvas.clientWidth - padding * 2);
+            const y = padding + Math.random() * (gameCanvas.clientHeight - padding * 2);
+            
+            target.style.left = x + 'px';
+            target.style.top = y + 'px';
+            
+            // 随机大小
+            const size = 60 + Math.random() * 40;
+            target.style.width = size + 'px';
+            target.style.height = size + 'px';
+            
+            target.onclick = (e) => {
+                e.stopPropagation();
+                handleTargetClick(target);
+            };
+            
+            gameCanvas.appendChild(target);
+            
+            // 自动消失
+            setTimeout(() => {
+                if (target.parentNode) {
+                    target.remove();
+                    gameState.combo = 0;
+                    updateStats();
+                    if (gameState.isPlaying) spawnClickTarget();
+                }
+            }, 2000 + Math.random() * 1000);
+        }
+
+        function handleTargetClick(target) {
+            const rect = target.getBoundingClientRect();
+            
+            // 成功效果
+            showSuccessEffect(rect.left + rect.width/2, rect.top + rect.height/2);
+            showScorePopup(target.offsetLeft, target.offsetTop, 10 + gameState.combo * 2);
+            
+            // 更新分数
+            gameState.score += 10 + gameState.combo * 2;
+            gameState.combo++;
+            gameState.totalClicks++;
+            gameState.successClicks++;
+            
+            if (gameState.combo > gameState.maxCombo) {
+                gameState.maxCombo = gameState.combo;
+            }
+            
+            updateStats();
+            target.remove();
+            
+            // 生成新目标
+            setTimeout(() => {
+                if (gameState.isPlaying) spawnClickTarget();
+            }, 300);
+        }
+
+        // ============ 拖拽游戏 ============
+        let dragState = {
+            isDragging: false,
+            currentItem: null,
+            pathProgress: 0
+        };
+
+        function startDragGame() {
+            gameCanvas.innerHTML = '';
+            createDragLevel();
+        }
+
+        function createDragLevel() {
+            // 创建引导路径
+            const startX = 150;
+            const startY = 300;
+            const endX = gameCanvas.clientWidth - 200;
+            const endY = 300;
+            
+            // SVG 路径
+            const pathContainer = document.createElement('div');
+            pathContainer.className = 'guide-path';
+            pathContainer.style.cssText = `
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+            `;
+            
+            // 创建弯曲路径
+            const midX = (startX + endX) / 2;
+            const curveY1 = startY - 150;
+            const curveY2 = startY + 150;
+            
+            pathContainer.innerHTML = `
+                <svg width="100%" height="100%">
+                    <path d="M ${startX} ${startY} 
+                             Q ${midX - 100} ${curveY1}, ${midX} ${startY}
+                             Q ${midX + 100} ${curveY2}, ${endX} ${endY}" 
+                          stroke="rgba(34, 197, 94, 0.3)" 
+                          stroke-width="60" 
+                          fill="none"
+                          stroke-linecap="round"/>
+                    <path class="path-center"
+                          d="M ${startX} ${startY} 
+                             Q ${midX - 100} ${curveY1}, ${midX} ${startY}
+                             Q ${midX + 100} ${curveY2}, ${endX} ${endY}" 
+                          stroke="rgba(34, 197, 94, 0.5)" 
+                          stroke-width="3" 
+                          fill="none"
+                          stroke-dasharray="10,10"/>
+                </svg>
+            `;
+            gameCanvas.appendChild(pathContainer);
+            
+            // 创建目标区域
+            const targetZone = document.createElement('div');
+            targetZone.className = 'drag-target';
+            targetZone.id = 'dragTarget';
+            targetZone.style.left = (endX - 50) + 'px';
+            targetZone.style.top = (endY - 50) + 'px';
+            targetZone.textContent = '🏠';
+            gameCanvas.appendChild(targetZone);
+            
+            // 创建拖拽物体
+            const dragItem = document.createElement('div');
+            dragItem.className = 'drag-item';
+            dragItem.id = 'dragItem';
+            dragItem.style.left = (startX - 35) + 'px';
+            dragItem.style.top = (startY - 35) + 'px';
+            dragItem.textContent = '⭐';
+            
+            // 拖拽事件
+            dragItem.onmousedown = startDrag;
+            dragItem.ontouchstart = startDrag;
+            
+            gameCanvas.appendChild(dragItem);
+            
+            // 存储路径信息
+            dragState.path = {
+                startX, startY, endX, endY,
+                midX, curveY1, curveY2
+            };
+        }
+
+        function startDrag(e) {
+            e.preventDefault();
+            dragState.isDragging = true;
+            dragState.currentItem = e.target;
+            
+            document.onmousemove = handleDrag;
+            document.ontouchmove = handleDrag;
+            document.onmouseup = endDrag;
+            document.ontouchend = endDrag;
+        }
+
+        function handleDrag(e) {
+            if (!dragState.isDragging) return;
+            
+            const clientX = e.clientX || e.touches[0].clientX;
+            const clientY = e.clientY || e.touches[0].clientY;
+            
+            const rect = gameCanvas.getBoundingClientRect();
+            const x = clientX - rect.left - 35;
+            const y = clientY - rect.top - 35;
+            
+            dragState.currentItem.style.left = x + 'px';
+            dragState.currentItem.style.top = y + 'px';
+            
+            // 创建轨迹效果
+            createTrail(x + 35, y + 35);
+            
+            // 检测是否在路径上
+            checkPathProgress(x + 35, y + 35);
+            
+            // 检测目标区域
+            const target = document.getElementById('dragTarget');
+            const targetRect = target.getBoundingClientRect();
+            
+            if (clientX > targetRect.left && clientX < targetRect.right &&
+                clientY > targetRect.top && clientY < targetRect.bottom) {
+                target.classList.add('active');
+            } else {
+                target.classList.remove('active');
+            }
+        }
+
+        function endDrag(e) {
+            if (!dragState.isDragging) return;
+            
+            const target = document.getElementById('dragTarget');
+            if (target.classList.contains('active')) {
+                // 成功完成
+                gameState.score += 50;
+                gameState.successClicks++;
+                showSuccessEffect(
+                    target.offsetLeft + 50,
+                    target.offsetTop + 50
+                );
+                showScorePopup(target.offsetLeft, target.offsetTop, 50);
+                
+                // 重新创建关卡
+                setTimeout(() => {
+                    if (gameState.isPlaying) {
+                        createDragLevel();
+                    }
+                }, 1000);
+            }
+            
+            gameState.totalClicks++;
+            updateStats();
+            
+            dragState.isDragging = false;
+            dragState.currentItem = null;
+            document.onmousemove = null;
+            document.ontouchmove = null;
+        }
+
+        function createTrail(x, y) {
+            const trail = document.createElement('div');
+            trail.className = 'trail';
+            trail.style.left = (x - 7.5) + 'px';
+            trail.style.top = (y - 7.5) + 'px';
+            gameCanvas.appendChild(trail);
+            
+            setTimeout(() => trail.remove(), 500);
+        }
+
+        function checkPathProgress(x, y) {
+            // 简化的路径检测
+            const path = dragState.path;
+            if (!path) return;
+            
+            // 计算到路径中心的距离
+            const distToPath = Math.abs(y - path.startY);
+            
+            if (distToPath < 50) {
+                // 在路径范围内
+                dragState.pathProgress = (x - path.startX) / (path.endX - path.startX);
+                dragState.pathProgress = Math.max(0, Math.min(1, dragState.pathProgress));
+            }
+        }
+
+        // ============ 效果函数 ============
+        function showSuccessEffect(x, y) {
+            const effect = document.createElement('div');
+            effect.className = 'success-effect';
+            effect.style.left = x + 'px';
+            effect.style.top = y + 'px';
+            effect.style.width = '50px';
+            effect.style.height = '50px';
+            effect.style.borderRadius = '50%';
+            effect.style.border = '3px solid #22c55e';
+            gameCanvas.appendChild(effect);
+            
+            setTimeout(() => effect.remove(), 500);
+        }
+
+        function showScorePopup(x, y, score) {
+            const popup = document.createElement('div');
+            popup.className = 'score-popup';
+            popup.style.left = x + 'px';
+            popup.style.top = y + 'px';
+            popup.textContent = '+' + score;
+            gameCanvas.appendChild(popup);
+            
+            setTimeout(() => popup.remove(), 1000);
+        }
+
+        function endGame() {
+            gameState.isPlaying = false;
+            clearInterval(gameState.timer);
+            
+            gameCanvas.innerHTML = `
+                <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center;">
+                    <h2 style="font-size: 48px; margin-bottom: 20px;">🎉 训练完成!</h2>
+                    <p style="font-size: 24px; margin-bottom: 10px;">最终得分: ${gameState.score}</p>
+                    <p style="font-size: 18px; color: rgba(255,255,255,0.7);">最高连击: ${gameState.maxCombo}</p>
+                    <p style="font-size: 18px; color: rgba(255,255,255,0.7);">准确率: ${Math.round((gameState.successClicks / Math.max(1, gameState.totalClicks)) * 100)}%</p>
+                </div>
+            `;
+        }
+
+        // ============ 手势追踪模拟 ============
+        function simulateHandTracking() {
+            const tracker = document.getElementById('handTracker');
+            const point1 = document.getElementById('handPoint1');
+            const point2 = document.getElementById('handPoint2');
+            const point3 = document.getElementById('handPoint3');
+            
+            let angle = 0;
+            
+            setInterval(() => {
+                angle += 0.05;
+                
+                const x = 150 + Math.sin(angle) * 50;
+                const y = 90 + Math.cos(angle * 0.7) * 40;
+                
+                point1.style.left = x + 'px';
+                point1.style.top = y + 'px';
+                
+                point2.style.left = (x + 20) + 'px';
+                point2.style.top = (y + 25) + 'px';
+                
+                point3.style.left = (x + 10) + 'px';
+                point3.style.top = (y + 45) + 'px';
+                
+                // 更新深度
+                const depth = (3 + Math.sin(angle * 0.3) * 2).toFixed(1);
+                document.getElementById('depthValue').textContent = depth;
+                
+                // 更新深度指示器
+                const zones = document.querySelectorAll('.depth-zone');
+                zones.forEach(z => z.classList.remove('active'));
+                
+                if (depth > 5) zones[0].classList.add('active');
+                else if (depth > 2) zones[1].classList.add('active');
+                else zones[2].classList.add('active');
+                
+            }, 50);
+        }
+
+        // 初始化
+        simulateHandTracking();
+    </script>
+</body>
+</html>
